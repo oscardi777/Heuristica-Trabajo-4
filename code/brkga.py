@@ -8,7 +8,7 @@ import pandas as pd
 # Archivos
 # ─────────────────────────────────────────────
 INSTANCES_DIR = "NWJSSP Instances"
-OUTPUT_FILE_BKGA = "resultados\\NWJSSP_OADG_NEH(BKGA).xlsx"
+OUTPUT_FILE_BRKGA = "resultados\\NWJSSP_OADG_BRKGA.xlsx"
 
 # ─────────────────────────────────────────────
 # Parámetros del Algoritmo Genético
@@ -18,6 +18,9 @@ ELITE_SIZE     = 20     # Número de individuos élite que sobreviven cada gener
 MUT_PROB       = 0.15   # Probabilidad de mutación por individuo
 TOURNAMENT_K   = 2      # Tamaño del torneo para selección de padres
 MAX_TIME       = 3600   # Tiempo máximo por instancia (segundos)
+MAX_GEN_NO_IMPROVE = 300 # Número máximo de generaciones sin mejora antes de detener (opcional)
+SIZE_MUTATE_KEYS = 0.20 # Porcentaje de genes a mutar (entre 10-20% recomendado)
+BIAS_FATHER = 0.5         # Probabilidad de tomar el gen del padre 1 en el cruce uniforme
 
 # ─────────────────────────────────────────────
 # Instancias a procesar
@@ -26,10 +29,10 @@ INSTANCES = [
     "ft06.txt",           "ft06r.txt",
     "ft10.txt",           "ft10r.txt",
     "ft20.txt",           "ft20r.txt",
-    #"tai_j10_m10_1.txt",    "tai_j10_m10_1r.txt",
-    #"tai_j100_m10_1.txt",   "tai_j100_m10_1r.txt",
-    #"tai_j100_m100_1.txt",  "tai_j100_m100_1r.txt",
-    #"tai_j1000_m10_1.txt",  "tai_j1000_m10_1r.txt",
+    "tai_j10_m10_1.txt",    "tai_j10_m10_1r.txt",
+    "tai_j100_m10_1.txt",   "tai_j100_m10_1r.txt",
+    "tai_j100_m100_1.txt",  "tai_j100_m100_1r.txt",
+    "tai_j1000_m10_1.txt",  "tai_j1000_m10_1r.txt",
 ]
 
 random.seed(42)
@@ -225,127 +228,122 @@ def tournament_selection(population: list[Individual], k: int = TOURNAMENT_K) ->
 
 
 # ─────────────────────────────────────────────
-# CRUCE: UNIFORME SOBRE RANDOM KEYS
+# CRUCE: SESGADO SOBRE RANDOM KEYS
 # ─────────────────────────────────────────────
-def uniform_crossover(parent1: Individual, parent2: Individual) -> Individual:
+def bias_crossover(parent1: Individual, parent2: Individual, bias_father: float = BIAS_FATHER) -> Individual:
     """
-    Cruce uniforme: para cada posición, toma el valor del padre 1 o padre 2
-    con probabilidad 0.5 cada uno.
+    Cruce con sesgo: para cada posición, toma el valor del padre 1 o padre 2
+    con probabilidad `BIAS_FATHER` y `1 - BIAS_FATHER` respectivamente.
     Retorna un nuevo individuo hijo (offspring).
     """
     n = len(parent1.keys)
     child_keys = [
-        parent1.keys[i] if random.random() < 0.5 else parent2.keys[i]
+        parent1.keys[i] if random.random() < bias_father else parent2.keys[i]
         for i in range(n)
     ]
     return Individual(child_keys)
 
 
 # ─────────────────────────────────────────────
-# MUTACIÓN: SWAP DE DOS POSICIONES EN KEYS
+# MUTACIÓN: alteracion de los random keys
 # ─────────────────────────────────────────────
-def mutate(individual: Individual, mut_prob: float = MUT_PROB) -> Individual:
+def mutate(individual: Individual, mut_prob: float = 0.20) -> Individual:
     """
-    Mutación por swap: con probabilidad `mut_prob`, selecciona dos posiciones
-    distintas en la lista de keys y las intercambia.
-    Opera sobre una copia del individuo (no modifica el original).
+    Mutación Gaussiana para Random Keys.
+    Mutamos un porcentaje de los genes con ruido gaussiano.
     """
-    if random.random() < mut_prob:
-        new_keys = individual.keys[:]
-        i, j = random.sample(range(len(new_keys)), 2)
-        new_keys[i], new_keys[j] = new_keys[j], new_keys[i]
-        return Individual(new_keys)   # nuevo individuo con objective=None
-    return individual
+    if random.random() >= mut_prob:
+        return individual.copy()
+    
+    child = individual.copy()
+    n = len(child.keys)
+    
+    # Garantizamos mutar al menos 1 gen
+    num_mutations = max(1, int(SIZE_MUTATE_KEYS * n))
+    
+    for _ in range(num_mutations):
+        i = random.randint(0, n - 1)
+        # Perturbación gaussiana
+        child.keys[i] += random.gauss(0, 0.15)
+        # Mantener en [0, 1]
+        child.keys[i] = max(0.0, min(1.0, child.keys[i]))
+    
+    child.sequence = sorted(range(n), key=lambda i: child.keys[i])
+    
+    child.objective = None
+    
+    return child
 
 
 # ─────────────────────────────────────────────
-# ALGORITMO GENÉTICO CON RANDOM KEYS (BKGA)
+# ALGORITMO GENÉTICO CON RANDOM KEYS (BRKGA)
 # ─────────────────────────────────────────────
-def bkga(jobs, m, offsets_list, start_time,
+def brkga(jobs, m, offsets_list, start_time,
          pop_size=POP_SIZE, elite_size=ELITE_SIZE,
          mut_prob=MUT_PROB, tournament_k=TOURNAMENT_K,
-         max_time=MAX_TIME):
-    """
-    Biased Key Genetic Algorithm (BKGA) para el NWJSSP.
-
-    Parámetros:
-        jobs         : lista de objetos Job
-        m            : número de máquinas
-        offsets_list : offsets precomputados por job
-        start_time   : tiempo de inicio (time.time())
-        pop_size     : tamaño de la población
-        elite_size   : número de élites que se preservan por generación
-        mut_prob     : probabilidad de mutación
-        tournament_k : tamaño del torneo
-        max_time     : tiempo máximo en segundos
-
-    Retorna:
-        best_sequence : mejor secuencia encontrada
-        best_z        : mejor valor de función objetivo
-        finish_time   : tiempo de finalización
-    """
+         max_time=MAX_TIME, max_gen_no_improve=MAX_GEN_NO_IMPROVE, bias_father=BIAS_FATHER):
+    
     n = len(jobs)
     generation = 0
+    generations_no_improve = 0
+    best_objective = float('inf')
 
-    # ── 1. Inicializar población ──────────────────────────────────────────
+    # Inicialización
     population = initialize_population(pop_size, n)
-
-    # Evaluar toda la población inicial
     for ind in population:
         ind.evaluate(jobs, m, offsets_list)
-
-    # Ordenar de mejor (menor) a peor
-    population.sort()
+    population.sort(key=lambda x: x.objective)
 
     best = population[0].copy()
-    print(f"  Gen {generation:>4} | Mejor objetivo: {best.objective:>12,} | "
-          f"Tiempo: {time.time() - start_time:>7.1f}s")
+    best_objective = best.objective
 
-    # ── 2. Ciclo evolutivo ───────────────────────────────────────────────
-    while time.time() - start_time < max_time:
+    print(f"  Gen {generation:>4} | Mejor objetivo: {best.objective:>12,} | Tiempo: {time.time() - start_time:>7.1f}s")
+
+    while (time.time() - start_time < max_time):
         generation += 1
 
-        # ── 2a. Élite: los mejores individuos pasan directamente ──────────
+        # Elite
         elite = [ind.copy() for ind in population[:elite_size]]
 
-        # ── 2b. Generar offspring hasta completar la población ────────────
-        offspring_size = pop_size - elite_size
+        # Generar offspring
         offspring = []
-
+        offspring_size = pop_size - elite_size
         for _ in range(offspring_size):
-            # Selección de padres por torneo
             p1 = tournament_selection(population, tournament_k)
             p2 = tournament_selection(population, tournament_k)
-
-            # Cruce uniforme sobre random keys
-            child = uniform_crossover(p1, p2)
-
-            # Mutación
+            child = bias_crossover(p1, p2, bias_father)
             child = mutate(child, mut_prob)
-
             offspring.append(child)
 
-        # ── 2c. Evaluar offspring (lazy: solo los no evaluados) ───────────
+        # Evaluar offspring
         for ind in offspring:
             ind.evaluate(jobs, m, offsets_list)
 
-        # ── 2d. Nueva población = élite + mejores offspring ───────────────
-        offspring.sort()
+        # Nueva población
         population = elite + offspring
-        population.sort()
+        population.sort(key=lambda x: x.objective)
 
-        # ── 2e. Actualizar mejor solución global ──────────────────────────
+        # === ACTUALIZACIÓN DEL MEJOR Y CONTADOR ===
+        improved = False
         if population[0].objective < best.objective:
             best = population[0].copy()
-            elapsed = time.time() - start_time
-            print(f"  Gen {generation:>4} | Mejor objetivo: {best.objective:>12,} ★ | "
-                  f"Tiempo: {elapsed:>7.1f}s")
-        elif generation % 50 == 0:
-            elapsed = time.time() - start_time
-            print(f"  Gen {generation:>4} | Mejor objetivo: {best.objective:>12,}   | "
-                  f"Tiempo: {elapsed:>7.1f}s")
+            best_objective = best.objective
+            generations_no_improve = 0
+            improved = True
+            print(f"  Gen {generation:>4} | Mejor objetivo: {best.objective:>12,} ★ | Tiempo: {time.time() - start_time:>7.1f}s")
+        else:
+            generations_no_improve += 1
+            if generation % 50 == 0:
+                print(f"  Gen {generation:>4} | Mejor objetivo: {best.objective:>12,}   | Tiempo: {time.time() - start_time:>7.1f}s")
 
-    return best.sequence, best.objective, time.time()
+        # Criterio de parada por estancamiento
+        if generations_no_improve >= max_gen_no_improve:
+            print(f"  → Parada por estancamiento ({max_gen_no_improve} generaciones sin mejora) en generación {generation}")
+            break
+
+    total_time = time.time() - start_time
+    print(f"\nResultado final → Flujo total: {best.objective:,.0f} | Tiempo: {total_time:.1f}s")
+    return best.sequence, best.objective, total_time
 
 
 # ─────────────────────────────────────────────
@@ -363,7 +361,7 @@ def main():
         sheet_name = inst.replace(".txt", "")
 
         print(f"\n{'─'*60}")
-        print(f"[BKGA] Procesando instancia: {inst}  (n={n}, m={m})")
+        print(f"[BRKGA] Procesando instancia: {inst}  (n={n}, m={m})")
         print(f"{'─'*60}")
 
         offsets_list = precompute_offsets(jobs)
@@ -371,30 +369,31 @@ def main():
         # Timer inicia ANTES del algoritmo
         t0 = time.time()
 
-        # Ejecutar BKGA
-        seq_bkga, z_bkga, time_finish = bkga(
+        # Ejecutar BRKGA
+        seq_brkga, z_brkga, elapsed_time = brkga(
             jobs, m, offsets_list, t0,
             pop_size=POP_SIZE,
             elite_size=ELITE_SIZE,
             mut_prob=MUT_PROB,
             tournament_k=TOURNAMENT_K,
             max_time=MAX_TIME,
+            max_gen_no_improve=MAX_GEN_NO_IMPROVE,
+            bias_father=BIAS_FATHER
         )
 
-        compute_time_ms = round((time_finish - t0) * 1000)
-        print(f"\n  Resultado final → Flujo total: {z_bkga:,} | Tiempo: {compute_time_ms/1000:.1f}s")
+        print(f"\n  Resultado final → Flujo total: {z_brkga:,} | Tiempo: {elapsed_time:.1f}s")
 
         # Obtener tiempos de inicio de cada job (operación 0) para el Excel
         _, schedule = evaluate_sequence_preciso(
-            seq_bkga, jobs, m, offsets_list, save_schedule=True
+            seq_brkga, jobs, m, offsets_list, save_schedule=True
         )
         job_start_times = [None] * n
         for op in schedule:
             if op["operation"] == 0:
                 job_start_times[op["job"]] = op["start"]
 
-        single_results = {sheet_name: (z_bkga, compute_time_ms, job_start_times)}
-        write_results_to_excel(single_results, OUTPUT_FILE_BKGA)
+        single_results = {sheet_name: (z_brkga, elapsed_time, job_start_times)}
+        write_results_to_excel(single_results, OUTPUT_FILE_BRKGA)
 
 
 if __name__ == "__main__":
