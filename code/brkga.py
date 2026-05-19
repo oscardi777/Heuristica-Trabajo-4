@@ -13,14 +13,14 @@ OUTPUT_FILE_BRKGA = "resultados\\NWJSSP_OADG_BRKGA.xlsx"
 # ─────────────────────────────────────────────
 # Parámetros del Algoritmo Genético
 # ─────────────────────────────────────────────
-POP_SIZE       = 200    # Tamaño de la población
-ELITE_SIZE     = 20     # Número de individuos élite que sobreviven cada generación
-MUT_PROB       = 0.15   # Probabilidad de mutación por individuo
+POP_SIZE       = 250
+ELITE_SIZE     = 25     # ~10%
+MUT_PROB       = 0.20
+BIAS_FATHER    = 0.75   # más sesgo hacia el mejor padre
+MAX_GEN_NO_IMPROVE = 250
+SIZE_MUTATE_KEYS = 0.15
 TOURNAMENT_K   = 2      # Tamaño del torneo para selección de padres
 MAX_TIME       = 3600   # Tiempo máximo por instancia (segundos)
-MAX_GEN_NO_IMPROVE = 300 # Número máximo de generaciones sin mejora antes de detener (opcional)
-SIZE_MUTATE_KEYS = 0.20 # Porcentaje de genes a mutar (entre 10-20% recomendado)
-BIAS_FATHER = 0.5         # Probabilidad de tomar el gen del padre 1 en el cruce uniforme
 
 # ─────────────────────────────────────────────
 # Instancias a procesar
@@ -236,6 +236,10 @@ def bias_crossover(parent1: Individual, parent2: Individual, bias_father: float 
     con probabilidad `BIAS_FATHER` y `1 - BIAS_FATHER` respectivamente.
     Retorna un nuevo individuo hijo (offspring).
     """
+
+    if parent2.objective < parent1.objective:
+        parent1, parent2 = parent2, parent1
+
     n = len(parent1.keys)
     child_keys = [
         parent1.keys[i] if random.random() < bias_father else parent2.keys[i]
