@@ -301,7 +301,7 @@ def brkga(jobs, m, offsets_list, start_time,
     best = population[0].copy()
     best_objective = best.objective
 
-    print(f"  Gen {generation:>4} | Mejor objetivo: {best.objective:>12,} | Tiempo: {time.time() - start_time:>7.1f}s")
+    print(f"  Gen {generation:>4} | Mejor objetivo: {best.objective:>12,} | Tiempo: {round((time.time() - start_time)*1000):>7.1f}ms")
 
     while (time.time() - start_time < max_time):
         generation += 1
@@ -334,19 +334,19 @@ def brkga(jobs, m, offsets_list, start_time,
             best_objective = best.objective
             generations_no_improve = 0
             improved = True
-            print(f"  Gen {generation:>4} | Mejor objetivo: {best.objective:>12,} ★ | Tiempo: {time.time() - start_time:>7.1f}s")
+            print(f"  Gen {generation:>4} | Mejor objetivo: {best.objective:>12,} ★ | Tiempo: {round((time.time() - start_time)*1000):>7.1f}ms")
         else:
             generations_no_improve += 1
             if generation % 50 == 0:
-                print(f"  Gen {generation:>4} | Mejor objetivo: {best.objective:>12,}   | Tiempo: {time.time() - start_time:>7.1f}s")
+                print(f"  Gen {generation:>4} | Mejor objetivo: {best.objective:>12,}   | Tiempo: {round((time.time() - start_time)*1000):>7.1f}ms")
 
         # Criterio de parada por estancamiento
         if generations_no_improve >= max_gen_no_improve:
             print(f"  → Parada por estancamiento ({max_gen_no_improve} generaciones sin mejora) en generación {generation}")
             break
 
-    total_time = time.time() - start_time
-    print(f"\nResultado final → Flujo total: {best.objective:,.0f} | Tiempo: {total_time:.1f}s")
+    total_time = round((time.time() - start_time)*1000)
+    print(f"\nResultado final → Flujo total: {best.objective:,.0f} | Tiempo: {total_time:.1f}ms")
     return best.sequence, best.objective, total_time
 
 
@@ -385,7 +385,7 @@ def main():
             bias_father=BIAS_FATHER
         )
 
-        print(f"\n  Resultado final → Flujo total: {z_brkga:,} | Tiempo: {elapsed_time:.1f}s")
+        print(f"\n  Resultado final → Flujo total: {z_brkga:,} | Tiempo: {elapsed_time:.1f}ms")
 
         # Obtener tiempos de inicio de cada job (operación 0) para el Excel
         _, schedule = evaluate_sequence_preciso(
