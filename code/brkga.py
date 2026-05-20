@@ -13,10 +13,10 @@ OUTPUT_FILE_BRKGA = "resultados\\NWJSSP_OADG_BRKGA.xlsx"
 # ─────────────────────────────────────────────
 # Parámetros del Algoritmo Genético
 # ─────────────────────────────────────────────
-POP_SIZE       = 250
-ELITE_SIZE     = 25     # ~10%
+POP_SIZE       = 100
+ELITE_SIZE     = 25
 MUT_PROB       = 0.20
-BIAS_FATHER    = 0.75   # más sesgo hacia el mejor padre
+BIAS_FATHER    = 0.75
 MAX_GEN_NO_IMPROVE = 250
 SIZE_MUTATE_KEYS = 0.15
 TOURNAMENT_K   = 2      # Tamaño del torneo para selección de padres
@@ -26,11 +26,11 @@ MAX_TIME       = 3600   # Tiempo máximo por instancia (segundos)
 # Instancias a procesar
 # ─────────────────────────────────────────────
 INSTANCES = [
-    "ft06.txt",           "ft06r.txt",
-    "ft10.txt",           "ft10r.txt",
-    "ft20.txt",           "ft20r.txt",
-    "tai_j10_m10_1.txt",    "tai_j10_m10_1r.txt",
-    "tai_j100_m10_1.txt",   "tai_j100_m10_1r.txt",
+    #"ft06.txt",           "ft06r.txt",
+    #"ft10.txt",           "ft10r.txt",
+    #"ft20.txt",           "ft20r.txt",
+    #"tai_j10_m10_1.txt",    "tai_j10_m10_1r.txt",
+    #"tai_j100_m10_1.txt",   "tai_j100_m10_1r.txt",
     "tai_j100_m100_1.txt",  "tai_j100_m100_1r.txt",
     "tai_j1000_m10_1.txt",  "tai_j1000_m10_1r.txt",
 ]
