@@ -13,8 +13,8 @@ OUTPUT_FILE_EPR  = "resultados\\NWJSSP_OADG_EPR(VND).xlsx"
 # ─────────────────────────────────────────────
 # Parámetros
 # ─────────────────────────────────────────────
-POP_SIZE            = 30
-ELITE_SIZE          = 10
+POP_SIZE            = 100
+ELITE_SIZE          = 25
 MUT_PROB            = 0.20
 BIAS_FATHER         = 0.75
 SIZE_MUTATE_KEYS    = 0.15
@@ -23,7 +23,7 @@ MAX_GEN_NO_IMPROVE  = 150   # CAMBIADO: 250 → 150 (menos generaciones sin mejo
 MAX_TIME            = 3600
  
 EPR_FREQ            = 25    # CAMBIADO: 10 → 25 (PR menos frecuente, deja madurar pop.)
-ELITE_POOL_SIZE     = 3
+ELITE_POOL_SIZE     = 5
 VND_TIME_LIMIT      = 60    # CAMBIADO: 100 → 60 s (techo más conservador por PR)
 
 # ─────────────────────────────────────────────
@@ -33,9 +33,9 @@ INSTANCES = [
     #"ft06.txt",           "ft06r.txt",
     #"ft10.txt",           "ft10r.txt",
     #"ft20.txt",           "ft20r.txt",
-    #tai_j10_m10_1.txt",    "tai_j10_m10_1r.txt",
-    #tai_j100_m10_1.txt",   "tai_j100_m10_1r.txt",
-    #tai_j100_m100_1.txt",  "tai_j100_m100_1r.txt",
+    "tai_j10_m10_1.txt",    "tai_j10_m10_1r.txt",
+    "tai_j100_m10_1.txt",   "tai_j100_m10_1r.txt",
+    "tai_j100_m100_1.txt",  "tai_j100_m100_1r.txt",
     "tai_j1000_m10_1.txt",  "tai_j1000_m10_1r.txt",
 ]
 
