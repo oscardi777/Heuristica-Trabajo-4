@@ -11,23 +11,20 @@ INSTANCES_DIR    = "NWJSSP Instances"
 OUTPUT_FILE_EPR  = "resultados\\NWJSSP_OADG_EPR(VND).xlsx"
 
 # ─────────────────────────────────────────────
-# Parámetros BRKGA (base genética)
+# Parámetros
 # ─────────────────────────────────────────────
-POP_SIZE            = 100
-ELITE_SIZE          = 25
+POP_SIZE            = 30
+ELITE_SIZE          = 10
 MUT_PROB            = 0.20
 BIAS_FATHER         = 0.75
 SIZE_MUTATE_KEYS    = 0.15
 TOURNAMENT_K        = 2
-MAX_GEN_NO_IMPROVE  = 250
+MAX_GEN_NO_IMPROVE  = 150   # CAMBIADO: 250 → 150 (menos generaciones sin mejora)
 MAX_TIME            = 3600
-
-# ─────────────────────────────────────────────
-# Parámetros EPR
-# ─────────────────────────────────────────────
-EPR_FREQ            = 10
-ELITE_POOL_SIZE     = 5
-VND_TIME_LIMIT      = 100
+ 
+EPR_FREQ            = 25    # CAMBIADO: 10 → 25 (PR menos frecuente, deja madurar pop.)
+ELITE_POOL_SIZE     = 3
+VND_TIME_LIMIT      = 60    # CAMBIADO: 100 → 60 s (techo más conservador por PR)
 
 # ─────────────────────────────────────────────
 # Instancias a procesar
@@ -36,9 +33,9 @@ INSTANCES = [
     #"ft06.txt",           "ft06r.txt",
     #"ft10.txt",           "ft10r.txt",
     #"ft20.txt",           "ft20r.txt",
-    #"tai_j10_m10_1.txt",    "tai_j10_m10_1r.txt",
-    #"tai_j100_m10_1.txt",   "tai_j100_m10_1r.txt",
-    "tai_j100_m100_1.txt",  "tai_j100_m100_1r.txt",
+    #tai_j10_m10_1.txt",    "tai_j10_m10_1r.txt",
+    #tai_j100_m10_1.txt",   "tai_j100_m10_1r.txt",
+    #tai_j100_m100_1.txt",  "tai_j100_m100_1r.txt",
     "tai_j1000_m10_1.txt",  "tai_j1000_m10_1r.txt",
 ]
 
@@ -50,7 +47,7 @@ random.seed(42)
 # ═════════════════════════════════════════════
 
 class Operation:
-    """Representa una operación de un job: máquina asignada y tiempo de procesamiento."""
+    """Representa una operación de un job: máquin                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            a asignada y tiempo de procesamiento."""
     def __init__(self, machine, processing_time):
         self.machine = machine
         self.p = processing_time
@@ -392,58 +389,73 @@ def path_step(current, target):
 
 def path_relinking_with_vnd(source, target, jobs, m, offsets_list, start_time, time_limit):
     """
-    Genera el camino de soluciones intermedias entre `source` y `target` usando
-    movimientos deterministas (path_step), y aplica VND sobre cada solución intermedia.
-
+    Path Relinking con VND aplicado en un único punto intermedio aleatorio.
+ 
     Flujo:
-      1. Parte de `source` y va acercándose a `target` paso a paso.
-      2. En cada punto intermedio del camino aplica VND para mejorar la solución.
-      3. Registra la mejor solución encontrada en todo el camino.
-
-    Por qué VND en el camino NO lleva de vuelta a source o target:
-      - Los movimientos del path_step cambian la secuencia de forma DIRIGIDA hacia target,
-        creando soluciones intermedias que no son óptimos locales de VND.
-      - Al aplicar VND sobre estas soluciones intermedias, se exploran regiones del espacio
-        de búsqueda que son DISTINTAS de los óptimos locales de source y target,
-        pues el punto de partida del VND está en una zona diferente del espacio.
-      - La combinación camino-dirigido + VND actúa como intensificación en zonas
-        intermedias del espacio de permutaciones que de otro modo no se explorarían.
-
-    Retorna: (mejor_secuencia, mejor_z) encontrada en todo el camino.
+      1. Recorre el camino completo de `source` a `target` paso a paso,
+         guardando todas las soluciones intermedias generadas.
+      2. Elige aleatoriamente UNA solución intermedia del camino
+         (excluye source y target — ya son conocidos por el pool).
+      3. Aplica VND sobre esa única solución elegida.
+      4. Retorna la mejor entre: VND(intermedia), source, target.
+ 
+    Por qué este diseño:
+      - Recorrer el camino entero es O(n²) en total (n pasos × O(n) cada uno),
+        aceptable incluso para n=1000.
+      - Aplicar VND en UN solo punto en lugar de en todos reduce el costo
+        de O(n × VND_cost) a O(VND_cost), respetando el presupuesto de tiempo.
+      - La elección aleatoria del punto introduce diversificación: distintas
+        ejecuciones de PR entre el mismo par exploran regiones distintas.
+ 
+    Retorna: (mejor_secuencia, mejor_z) encontrada.
     """
+    import time
+    import random
+ 
+    # ── 1. Recorrer el camino completo y guardar intermedias ────────────
+    intermediates = []          # soluciones intermedias (sin source ni target)
     current_seq = source[:]
-    current_z   = evaluate_sequence_preciso(current_seq, jobs, m, offsets_list)
-    best_seq    = current_seq[:]
-    best_z      = current_z
-
-    steps = 0
+ 
     while position_distance(current_seq, target) > 0:
         if time.time() - start_time >= time_limit:
             break
-
-        # Paso determinista: acercar current hacia target
         current_seq = path_step(current_seq, target)
-        steps += 1
-
-        # Aplicar VND sobre la solución intermedia del camino
-        # Tiempo limitado para no agotar el presupuesto total
-        vnd_seq, vnd_z = vnd(
-            current_seq, jobs, m, offsets_list,
-            start_time, min(time_limit, time.time() - start_time + VND_TIME_LIMIT)
-        )
-
-        # Registrar la mejor solución del camino
-        if vnd_z < best_z:
-            best_z   = vnd_z
-            best_seq = vnd_seq[:]
-
-        # Actualizar current con la solución mejorada por VND solo si mejoró,
-        # para continuar el camino desde un punto potencialmente mejor
-        if vnd_z < current_z:
-            current_seq = vnd_seq[:]
-            current_z   = vnd_z
-
-    return best_seq, best_z
+        # Solo guardamos si aún no llegamos a target
+        if position_distance(current_seq, target) > 0:
+            intermediates.append(current_seq[:])
+ 
+    # Si el camino fue tan corto que no hay intermedias, no hay nada que hacer
+    if not intermediates:
+        best_z = evaluate_sequence_preciso(source, jobs, m, offsets_list)
+        return source[:], best_z
+ 
+    # ── 2. Elegir UNA intermedia al azar ───────────────────────────────
+    chosen = random.choice(intermediates)
+ 
+    # ── 3. Aplicar VND solo sobre esa solución ─────────────────────────
+    remaining = time_limit - (time.time() - start_time)
+    if remaining <= 0:
+        # Sin tiempo: retornar la intermedia sin VND
+        best_seq = chosen
+        best_z   = evaluate_sequence_preciso(chosen, jobs, m, offsets_list)
+        return best_seq, best_z
+ 
+    vnd_budget = min(VND_TIME_LIMIT, remaining)
+    vnd_seq, vnd_z = vnd(
+        chosen, jobs, m, offsets_list,
+        time.time(), vnd_budget
+    )
+ 
+    # ── 4. Comparar con source y target para retornar la mejor ─────────
+    source_z = evaluate_sequence_preciso(source, jobs, m, offsets_list)
+    target_z = evaluate_sequence_preciso(target, jobs, m, offsets_list)
+ 
+    if vnd_z <= source_z and vnd_z <= target_z:
+        return vnd_seq, vnd_z
+    elif source_z <= target_z:
+        return source[:], source_z
+    else:
+        return target[:], target_z
 
 
 # ═════════════════════════════════════════════
@@ -647,81 +659,38 @@ def epr(jobs, m, offsets_list, start_time,
         elite_pool_size=ELITE_POOL_SIZE):
     """
     Evolutionary Path Relinking (EPR) para el problema NWJSSP.
-
-    Descripción general:
-    ─────────────────────────────────────────────────────────────────
-    EPR combina un algoritmo genético con codificación de Random Keys (BRKGA)
-    con Path Relinking como mecanismo de intensificación periódica.
-
-    El algoritmo opera en tres niveles:
-
-      1. BRKGA (evolución genética):
-         Mantiene una población de individuos codificados como vectores de reales.
-         En cada generación aplica selección por torneo, cruce sesgado y mutación
-         gaussiana para generar offspring. Los élites se preservan directamente.
-
-      2. Pool de élite (memoria de buenas soluciones):
-         Las mejores soluciones encontradas se acumulan en un pool de tamaño fijo.
-         Este pool alimenta el procedimiento de Path Relinking.
-
-      3. Path Relinking con VND (intensificación):
-         Cada `epr_freq` generaciones se selecciona un par (source, target) del pool
-         y se explora el camino de soluciones intermedias entre ellas.
-         En cada punto intermedio se aplica VND para mejorar localmente la solución.
-         Los movimientos del camino son deterministas y dirigidos (distintos al VND),
-         lo que garantiza explorar regiones nuevas del espacio de permutaciones.
-
-    Criterios de parada:
-      - Tiempo total superado (`max_time` segundos).
-      - `max_gen_no_improve` generaciones consecutivas sin mejorar el mejor global.
-
-    Parámetros:
-      jobs, m, offsets_list : datos de la instancia.
-      start_time            : tiempo de inicio (para controlar el reloj).
-      pop_size              : tamaño de la población.
-      elite_size            : número de individuos élite preservados por generación.
-      mut_prob              : probabilidad de mutación.
-      tournament_k          : tamaño del torneo para selección.
-      max_time              : tiempo máximo en segundos.
-      max_gen_no_improve    : generaciones sin mejora para parar.
-      bias_father           : sesgo hacia el mejor padre en el cruce.
-      epr_freq              : cada cuántas generaciones se ejecuta Path Relinking.
-      elite_pool_size       : tamaño máximo del pool de élite para PR.
-
-    Retorna: (mejor_secuencia, mejor_objetivo, tiempo_total_ms).
+    Versión corregida: respeta el límite de tiempo en el Path Relinking.
     """
-
+    import time
+ 
     n = len(jobs)
     generation = 0
     generations_no_improve = 0
     best_objective = float('inf')
     best_sequence  = None
-
+ 
     # ── Inicialización ──────────────────────────────────────────────
     population = initialize_population(pop_size, n)
     for ind in population:
         ind.evaluate(jobs, m, offsets_list)
     population.sort(key=lambda x: x.objective)
-
-    # Pool de élite para Path Relinking
+ 
     pool = ElitePool(elite_pool_size)
-
-    # Cargar el pool con los mejores individuos iniciales
     for ind in population[:elite_size]:
         pool.add(ind.sequence, ind.objective)
-
+ 
     best_sequence  = population[0].sequence[:]
     best_objective = population[0].objective
-
+ 
     print(f"  Gen {generation:>4} | Mejor: {best_objective:>12,} | Pool: {len(pool):>2} | Tiempo: {round((time.time()-start_time)*1000):>7}ms")
-
+ 
     # ── Ciclo evolutivo ─────────────────────────────────────────────
     while time.time() - start_time < max_time:
         generation += 1
-
+ 
         # 1. Preservar élite
         elite = [ind.copy() for ind in population[:elite_size]]
-
+ 
         # 2. Generar offspring mediante cruce y mutación
         offspring = []
         for _ in range(pop_size - elite_size):
@@ -730,76 +699,76 @@ def epr(jobs, m, offsets_list, start_time,
             child = bias_crossover(p1, p2, bias_father)
             child = mutate(child, mut_prob)
             offspring.append(child)
-
+ 
         # 3. Evaluar offspring
         for ind in offspring:
             ind.evaluate(jobs, m, offsets_list)
-
+ 
         # 4. Nueva población = élite + offspring, ordenada
         population = elite + offspring
         population.sort(key=lambda x: x.objective)
-
+ 
         # 5. Actualizar pool de élite con los mejores de la generación
         for ind in population[:elite_size]:
             pool.add(ind.sequence, ind.objective)
-
+ 
         # 6. Actualizar mejor global
-        improved = False
         if population[0].objective < best_objective:
             best_objective = population[0].objective
             best_sequence  = population[0].sequence[:]
             generations_no_improve = 0
-            improved = True
             print(f"  Gen {generation:>4} | Mejor: {best_objective:>12,} ★ | Pool: {len(pool):>2} | Tiempo: {round((time.time()-start_time)*1000):>7}ms")
         else:
             generations_no_improve += 1
             if generation % 25 == 0:
                 print(f"  Gen {generation:>4} | Mejor: {best_objective:>12,}   | Pool: {len(pool):>2} | Tiempo: {round((time.time()-start_time)*1000):>7}ms")
-
-        # 7. Path Relinking periódico (cada epr_freq generaciones)
-        if generation % epr_freq == 0 and len(pool) >= 2:
+ 
+        # 7. Path Relinking periódico
+        #    CORRECCIÓN: verificar que quede tiempo suficiente antes de lanzar PR
+        elapsed = time.time() - start_time
+        tiempo_restante = max_time - elapsed
+ 
+        if (generation % epr_freq == 0
+                and len(pool) >= 2
+                and tiempo_restante > 30):          # ← NUEVO: mínimo 30 s disponibles
+ 
             pair = pool.get_pair()
             if pair is not None:
                 source_seq, target_seq = pair
-                remaining = max_time - (time.time() - start_time)
-                if remaining > 0:
-                    print(f"  [EPR] Gen {generation:>4} → Path Relinking entre par del pool (dist={position_distance(source_seq, target_seq)})")
-                    pr_seq, pr_z = path_relinking_with_vnd(
-                        source_seq, target_seq,
-                        jobs, m, offsets_list,
-                        start_time, max_time
-                    )
-
-                    # Agregar resultado de PR al pool
-                    pool.add(pr_seq, pr_z)
-
-                    # Verificar si PR encontró el nuevo mejor global
-                    if pr_z < best_objective:
-                        best_objective = pr_z
-                        best_sequence  = pr_seq[:]
-                        generations_no_improve = 0
-                        print(f"  [EPR] ★ Nueva mejor solución por PR: {best_objective:,}")
-
-                    # Inyectar la solución PR en la población reemplazando el peor individuo
-                    # (codificamos la secuencia como keys equiespaciadas según la posición)
-                    pr_keys = [0.0] * n
-                    for rank, job_id in enumerate(pr_seq):
-                        pr_keys[job_id] = rank / n
-                    pr_ind = Individual(pr_keys)
-                    pr_ind.sequence  = pr_seq[:]
-                    pr_ind.objective = pr_z
-                    population[-1]   = pr_ind
-                    population.sort(key=lambda x: x.objective)
-
+                print(f"  [EPR] Gen {generation:>4} → Path Relinking (dist={position_distance(source_seq, target_seq)}, restante={round(tiempo_restante)}s)")
+                pr_seq, pr_z = path_relinking_with_vnd(
+                    source_seq, target_seq,
+                    jobs, m, offsets_list,
+                    start_time, max_time      # ← se pasan start_time y max_time globales
+                )
+ 
+                pool.add(pr_seq, pr_z)
+ 
+                if pr_z < best_objective:
+                    best_objective = pr_z
+                    best_sequence  = pr_seq[:]
+                    generations_no_improve = 0
+                    print(f"  [EPR] ★ Nueva mejor solución por PR: {best_objective:,}")
+ 
+                # Inyectar solución PR en la población
+                pr_keys = [0.0] * n
+                for rank, job_id in enumerate(pr_seq):
+                    pr_keys[job_id] = rank / n
+                pr_ind = Individual(pr_keys)
+                pr_ind.sequence  = pr_seq[:]
+                pr_ind.objective = pr_z
+                population[-1]   = pr_ind
+                population.sort(key=lambda x: x.objective)
+ 
         # 8. Criterio de parada por estancamiento
         if generations_no_improve >= max_gen_no_improve:
             print(f"  → Parada por estancamiento ({max_gen_no_improve} gen sin mejora) en generación {generation}")
             break
-
+ 
     total_time_ms = round((time.time() - start_time) * 1000)
     print(f"\n  Resultado final → Flujo total: {best_objective:,} | Tiempo: {total_time_ms}ms")
     return best_sequence, best_objective, total_time_ms
-
+ 
 
 # ═════════════════════════════════════════════
 # MAIN
